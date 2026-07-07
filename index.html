@@ -71,6 +71,32 @@
   .list-head h2 { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0; }
   #count { font-size: 11.5px; color: var(--muted); }
 
+  /* Org layers panel (visible after sign-in) */
+  #orgLayers { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 14px; background: var(--panel-2); }
+  #orgLayers input {
+    width: 100%; background: var(--ink); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 10px; font-size: 12.5px; margin-bottom: 8px;
+  }
+  #orgLayers input:focus-visible { outline: none; border-color: var(--gold); }
+  #layerResults { list-style: none; margin: 0 0 8px; padding: 0; max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  #layerResults li { display: flex; align-items: center; gap: 8px; }
+  #layerResults .item-title { flex: 1; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #layerResults .item-type { font-size: 10.5px; color: var(--muted); }
+  #layerResults button.addBtn {
+    background: transparent; color: var(--gold); border: 1px solid var(--line);
+    border-radius: 6px; padding: 3px 9px; font-size: 11.5px; cursor: pointer; flex: none;
+  }
+  #layerResults button.addBtn:hover { border-color: var(--gold); }
+  #layerResults button.addBtn[disabled] { color: var(--muted); cursor: default; }
+  .url-row { display: flex; gap: 6px; }
+  .url-row input { margin-bottom: 0 !important; }
+  .url-row button {
+    background: transparent; color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 0 14px; font-size: 12.5px; cursor: pointer; flex: none;
+  }
+  .url-row button:hover { border-color: var(--gold); }
+  #layerMsg { font-size: 11px; color: var(--muted); margin: 6px 0 0; min-height: 14px; }
+
   #teamList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
   #teamList li button {
     display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center;
@@ -122,6 +148,17 @@
 
     <div class="filters" id="filters" role="group" aria-label="Filter by tournament status"></div>
 
+    <div id="orgLayers" hidden>
+      <div class="list-head"><h2>Your organization's layers</h2></div>
+      <input id="layerSearch" type="search" placeholder="Search My Content &amp; org layers…" aria-label="Search organization layers">
+      <ul id="layerResults"></ul>
+      <div class="url-row">
+        <input id="layerUrl" type="url" placeholder="Or paste a service URL / item ID" aria-label="Layer URL or item ID">
+        <button id="addUrl">Add</button>
+      </div>
+      <p id="layerMsg"></p>
+    </div>
+
     <div class="list-head">
       <h2>Teams</h2>
       <span id="count"></span>
@@ -149,10 +186,14 @@ require([
   "esri/widgets/Fullscreen",
   "esri/widgets/ScaleBar",
   "esri/identity/IdentityManager",
-  "esri/identity/OAuthInfo"
+  "esri/identity/OAuthInfo",
+  "esri/portal/Portal",
+  "esri/portal/PortalQueryParams",
+  "esri/layers/Layer"
 ], function (esriConfig, Map, MapView, FeatureLayer, GraphicsLayer, Graphic,
              Search, Legend, Expand, BasemapGallery, LayerList, Home,
-             Fullscreen, ScaleBar, esriId, OAuthInfo) {
+             Fullscreen, ScaleBar, esriId, OAuthInfo,
+             Portal, PortalQueryParams, Layer) {
 
   /* =========================================================
      1. TOURNAMENT DATA — status as of July 7, 2026
@@ -248,11 +289,117 @@ require([
     if (credential) {
       authStatus.textContent = "Signed in as " + credential.userId;
       signInBtn.hidden = true; signOutBtn.hidden = false;
+      initOrgLayers();
     } else {
       authStatus.textContent = "Browsing as guest";
       signInBtn.hidden = false; signOutBtn.hidden = true;
+      document.getElementById("orgLayers").hidden = true;
     }
   }
+
+  /* =========================================================
+     2b. ORG LAYERS — after sign-in, users can search their
+         own content + org content and add layers for analysis.
+         Added layers appear in the Layer List widget.
+     ========================================================= */
+  let portal = null;
+  const addedItemIds = new Set();
+  const layerResultsEl = () => document.getElementById("layerResults");
+  const layerMsg = (t) => { document.getElementById("layerMsg").textContent = t || ""; };
+
+  function initOrgLayers() {
+    const panel = document.getElementById("orgLayers");
+    panel.hidden = false;
+    if (portal) return;
+    portal = new Portal({ url: oauthInfo.portalUrl, authMode: "immediate" });
+    portal.load().then(() => {
+      layerMsg("Connected as " + portal.user.username + " · showing your recent layers");
+      searchOrgLayers("");   // preload user's recent content
+    }).catch(() => layerMsg("Could not load portal content."));
+  }
+
+  function searchOrgLayers(text) {
+    if (!portal || !portal.user) return;
+    const types = '(type:"Feature Service" OR type:"Map Service" OR type:"Vector Tile Service" OR type:"Image Service" OR type:"GeoJson" OR type:"KML")';
+    // Empty search → user's own content; typed search → whole organization
+    const scope = text
+      ? `orgid:${portal.user.orgId}`
+      : `owner:${portal.user.username}`;
+    const q = new PortalQueryParams({
+      query: `${text ? text + " AND " : ""}${scope} AND ${types}`,
+      sortField: "modified",
+      sortOrder: "desc",
+      num: 15
+    });
+    layerMsg("Searching…");
+    portal.queryItems(q).then((res) => {
+      renderLayerResults(res.results);
+      layerMsg(res.results.length
+        ? (text ? res.results.length + " org layers found" : "Your most recent layers")
+        : "No layers found — try another search term.");
+    }).catch(() => layerMsg("Search failed — check your connection."));
+  }
+
+  function renderLayerResults(items) {
+    const ul = layerResultsEl();
+    ul.innerHTML = "";
+    items.forEach((item) => {
+      const li = document.createElement("li");
+      const title = document.createElement("span");
+      title.className = "item-title";
+      title.textContent = item.title;
+      title.title = item.title + " — " + (item.owner || "");
+      const type = document.createElement("span");
+      type.className = "item-type";
+      type.textContent = item.type.replace(" Service", "");
+      const btn = document.createElement("button");
+      btn.className = "addBtn";
+      const already = addedItemIds.has(item.id);
+      btn.textContent = already ? "Added" : "Add";
+      btn.disabled = already;
+      btn.addEventListener("click", () => addPortalItem(item, btn));
+      li.append(title, type, btn);
+      ul.appendChild(li);
+    });
+  }
+
+  function addPortalItem(item, btn) {
+    layerMsg("Adding “" + item.title + "”…");
+    Layer.fromPortalItem({ portalItem: item }).then((layer) => {
+      map.add(layer);
+      addedItemIds.add(item.id);
+      if (btn) { btn.textContent = "Added"; btn.disabled = true; }
+      layerMsg("Added — manage it in the Layer List widget (top-right).");
+      layer.when(() => {
+        if (layer.fullExtent) view.goTo(layer.fullExtent).catch(() => {});
+      });
+    }).catch((e) => layerMsg("Could not add layer: " + (e.message || "unsupported type")));
+  }
+
+  // Search box (debounced)
+  let searchTimer = null;
+  document.getElementById("layerSearch").addEventListener("input", (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => searchOrgLayers(e.target.value.trim()), 400);
+  });
+
+  // Add by URL or 32-character item ID
+  document.getElementById("addUrl").addEventListener("click", () => {
+    const val = document.getElementById("layerUrl").value.trim();
+    if (!val) return;
+    if (/^[a-f0-9]{32}$/i.test(val)) {
+      // Item ID
+      Layer.fromPortalItem({ portalItem: { id: val, portal: portal || { url: oauthInfo.portalUrl } } })
+        .then((layer) => { map.add(layer); layerMsg("Added item " + val); })
+        .catch((e) => layerMsg("Could not add item: " + (e.message || "check the ID and sharing")));
+    } else {
+      Layer.fromArcGISServerUrl({ url: val })
+        .then((layer) => { map.add(layer); layerMsg("Added layer from URL"); })
+        .catch((e) => layerMsg("Could not add URL: " + (e.message || "is it a valid ArcGIS service?")));
+    }
+    document.getElementById("layerUrl").value = "";
+  });
+
   esriId.checkSignInStatus(oauthInfo.portalUrl + "/sharing")
     .then(refreshAuthUI).catch(() => refreshAuthUI(null));
   signInBtn.addEventListener("click", () => {
