@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FIFA World Cup 2026 — Flag Map (ArcGIS)</title>
+
+<!-- ArcGIS Maps SDK for JavaScript -->
+<link rel="stylesheet" href="https://js.arcgis.com/4.30/esri/themes/dark/main.css" />
+<script src="https://js.arcgis.com/4.30/"></script>
+
+<style>
+  :root {
+    --ink: #0e1512;
+    --panel: #12211b;
+    --panel-2: #172b22;
+    --line: #23443a;
+    --text: #e8f2ec;
+    --muted: #9db8ac;
+    --gold: #e7c25a;
+    --live: #46d68c;
+    --r16out: #5aa7e7;
+    --r32out: #8e7fd6;
+    --grpout: #c96b5a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--ink); color: var(--text);
+    font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif; }
+
+  #app { display: grid; grid-template-columns: 340px 1fr; height: 100vh; }
+  @media (max-width: 860px) { #app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } }
+
+  aside {
+    background: linear-gradient(180deg, var(--panel) 0%, var(--ink) 100%);
+    border-right: 1px solid var(--line);
+    overflow-y: auto; padding: 18px 18px 28px;
+  }
+  .eyebrow { font-size: 11px; letter-spacing: .22em; text-transform: uppercase; color: var(--gold); margin: 0 0 6px; }
+  h1 { font-size: 22px; line-height: 1.15; margin: 0 0 4px; font-weight: 700; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0 0 14px; }
+  .tab {
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
+    border-radius: 10px; padding: 9px 10px; font-size: 12.5px; font-weight: 600;
+    cursor: pointer; text-align: center;
+  }
+  .tab[aria-selected="true"] { color: var(--text); border-color: var(--gold); background: #1d3329; }
+  .tab:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+
+  .auth { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .auth button {
+    background: transparent; color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 12px; font-size: 12.5px; cursor: pointer;
+  }
+  .auth button:hover, .auth button:focus-visible { border-color: var(--gold); outline: none; }
+  #authStatus { font-size: 11.5px; color: var(--muted); }
+
+  .filters { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .chip {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 10px; padding: 8px 10px; font-size: 12.5px; cursor: pointer; text-align: left;
+  }
+  .chip .dot { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+  .chip .n { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .chip[aria-pressed="true"] { border-color: var(--gold); background: #1d3329; }
+  .chip:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+
+  .list-head { display: flex; align-items: baseline; justify-content: space-between; margin: 6px 0 6px; }
+  .list-head h2 { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  #count { font-size: 11.5px; color: var(--muted); }
+
+  #teamList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  #teamList li button {
+    display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center;
+    width: 100%; background: transparent; border: 1px solid transparent; color: var(--text);
+    padding: 6px 8px; border-radius: 8px; font-size: 13px; cursor: pointer; text-align: left;
+  }
+  #teamList li button:hover { background: var(--panel-2); border-color: var(--line); }
+  #teamList li button:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+  #teamList img.flag { width: 24px; height: 16px; object-fit: cover; border-radius: 2px;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.15); }
+  #teamList .grp { color: var(--muted); font-size: 11px; letter-spacing: .06em; }
+
+  #viewDiv { width: 100%; height: 100%; }
+  @media (max-width: 860px) { aside { max-height: 42vh; } }
+
+  .esri-popup__main-container { border-radius: 12px; }
+  .wc-pop { font-size: 13px; line-height: 1.5; }
+  .wc-pop .head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .wc-pop .head img { width: 42px; height: 28px; object-fit: cover; border-radius: 3px;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.2); }
+  .wc-pop .badge {
+    display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px;
+    font-weight: 700; letter-spacing: .04em; color: #10231a;
+  }
+  .wc-pop dl { margin: 6px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; }
+  .wc-pop dt { color: #8aa79a; }
+  .wc-pop dd { margin: 0; }
+
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside>
+    <p class="eyebrow">FIFA World Cup 26 · USA · Mexico · Canada</p>
+    <h1>48 Flags, One Map</h1>
+    <p class="sub">Every nation is drawn as its flag. Click a flag for group, confederation, and live tournament status (as of July 7, 2026 — quarter-finals stage).</p>
+
+    <div class="tabs" role="tablist" aria-label="Map views">
+      <button class="tab" id="tabStatus" role="tab" aria-selected="true">Tournament status</button>
+      <button class="tab" id="tabAll" role="tab" aria-selected="false">All 48 nations</button>
+    </div>
+
+    <div class="auth">
+      <button id="signIn">Sign in to ArcGIS</button>
+      <button id="signOut" hidden>Sign out</button>
+      <span id="authStatus">Browsing as guest</span>
+    </div>
+
+    <div class="filters" id="filters" role="group" aria-label="Filter by tournament status"></div>
+
+    <div class="list-head">
+      <h2>Teams</h2>
+      <span id="count"></span>
+    </div>
+    <ul id="teamList"></ul>
+  </aside>
+
+  <div id="viewDiv"></div>
+</div>
+
+<script>
+require([
+  "esri/config",
+  "esri/Map",
+  "esri/views/MapView",
+  "esri/layers/FeatureLayer",
+  "esri/layers/GraphicsLayer",
+  "esri/Graphic",
+  "esri/widgets/Search",
+  "esri/widgets/Legend",
+  "esri/widgets/Expand",
+  "esri/widgets/BasemapGallery",
+  "esri/widgets/LayerList",
+  "esri/widgets/Home",
+  "esri/widgets/Fullscreen",
+  "esri/widgets/ScaleBar",
+  "esri/identity/IdentityManager",
+  "esri/identity/OAuthInfo"
+], function (esriConfig, Map, MapView, FeatureLayer, GraphicsLayer, Graphic,
+             Search, Legend, Expand, BasemapGallery, LayerList, Home,
+             Fullscreen, ScaleBar, esriId, OAuthInfo) {
+
+  /* =========================================================
+     1. TOURNAMENT DATA — status as of July 7, 2026
+        team: [group, confederation, statusKey, note, iso, lon, lat]
+        iso = flagcdn.com code (gb-eng / gb-sct give England
+        and Scotland their own flags — no shared UK polygon)
+     ========================================================= */
+  const STATUSES = {
+    qf:    { label: "Quarter-finalist",           color: "#e7c25a" },
+    r16:   { label: "Round of 16 — in progress",  color: "#46d68c" },
+    outR16:{ label: "Eliminated — Round of 16",   color: "#5aa7e7" },
+    outR32:{ label: "Eliminated — Round of 32",   color: "#8e7fd6" },
+    outGrp:{ label: "Eliminated — Group stage",   color: "#c96b5a" }
+  };
+
+  const TEAMS = {
+    "Morocco":      ["C","CAF","qf","Beat Canada 3-0 in the Round of 16","ma",-6.0,32.0],
+    "France":       ["I","UEFA","qf","Beat Paraguay 1-0 in the Round of 16","fr",2.2,46.6],
+    "Norway":       ["I","UEFA","qf","Beat Brazil 2-1 in the Round of 16","no",9.0,61.0],
+    "England":      ["L","UEFA","qf","Beat Mexico 3-2 in the Round of 16","gb-eng",-1.5,52.5],
+    "Spain":        ["H","UEFA","qf","Beat Portugal 1-0 in the Round of 16","es",-3.7,40.2],
+    "Belgium":      ["G","UEFA","qf","Beat the United States in the Round of 16","be",4.5,50.6],
+
+    "Argentina":    ["J","CONMEBOL","r16","Defending champions · FIFA No. 1 · face Egypt","ar",-65.0,-35.0],
+    "Egypt":        ["G","CAF","r16","Beat Australia on penalties in the Round of 32","eg",30.0,26.8],
+    "Colombia":     ["K","CONMEBOL","r16","Beat Ghana 1-0 in the Round of 32","co",-74.3,4.6],
+    "Switzerland":  ["B","UEFA","r16","Beat Algeria 2-0 in the Round of 32","ch",8.2,46.8],
+
+    "Canada":       ["B","CONCACAF","outR16","Co-host · first ever Round of 16","ca",-106.0,58.0],
+    "Brazil":       ["C","CONMEBOL","outR16","Lost 2-1 to Norway","br",-53.0,-10.0],
+    "Paraguay":     ["D","CONMEBOL","outR16","Lost 1-0 to France","py",-58.4,-23.4],
+    "Mexico":       ["A","CONCACAF","outR16","Co-host · opened the tournament at Estadio Azteca","mx",-102.0,23.6],
+    "Portugal":     ["K","UEFA","outR16","Lost 1-0 to Spain","pt",-8.2,39.6],
+    "United States":["D","CONCACAF","outR16","Co-host · lost to Belgium","us",-98.0,39.5],
+
+    "South Africa": ["A","CAF","outR32","Lost 1-0 to Canada","za",24.0,-29.0],
+    "Japan":        ["F","AFC","outR32","Lost 2-1 to Brazil","jp",138.2,36.2],
+    "Germany":      ["E","UEFA","outR32","Lost to Paraguay on penalties","de",10.4,51.1],
+    "Netherlands":  ["F","UEFA","outR32","Lost to Morocco on penalties","nl",5.3,52.2],
+    "Côte d'Ivoire":["E","CAF","outR32","Lost 2-1 to Norway","ci",-5.5,7.5],
+    "Sweden":       ["F","UEFA","outR32","Lost 3-0 to France","se",15.0,62.0],
+    "Ecuador":      ["E","CONMEBOL","outR32","Lost 2-0 to Mexico","ec",-78.5,-1.5],
+    "DR Congo":     ["K","CAF","outR32","Lost 2-1 to England","cd",23.6,-2.9],
+    "Senegal":      ["I","CAF","outR32","Lost 3-2 to Belgium","sn",-14.5,14.5],
+    "Bosnia and Herzegovina":["B","UEFA","outR32","Lost 2-0 to the United States","ba",17.7,44.2],
+    "Austria":      ["J","UEFA","outR32","Lost 3-0 to Spain","at",14.5,47.6],
+    "Croatia":      ["L","UEFA","outR32","Lost 2-1 to Portugal","hr",16.4,45.2],
+    "Algeria":      ["J","CAF","outR32","Lost 2-0 to Switzerland","dz",2.6,28.0],
+    "Australia":    ["D","AFC","outR32","Lost to Egypt on penalties","au",134.0,-25.0],
+    "Cape Verde":   ["H","CAF","outR32","Debutant · only debutant to reach the knockouts","cv",-23.6,15.1],
+    "Ghana":        ["L","CAF","outR32","Lost 1-0 to Colombia","gh",-1.0,7.9],
+
+    "Czechia":      ["A","UEFA","outGrp","","cz",15.5,49.8],
+    "South Korea":  ["A","AFC","outGrp","","kr",127.8,36.5],
+    "Qatar":        ["B","AFC","outGrp","First qualification on merit","qa",51.2,25.3],
+    "Scotland":     ["C","UEFA","outGrp","First World Cup since 1998","gb-sct",-4.2,56.8],
+    "Haiti":        ["C","CONCACAF","outGrp","First World Cup since 1974","ht",-72.7,19.0],
+    "Türkiye":      ["D","UEFA","outGrp","","tr",35.2,39.0],
+    "Curaçao":      ["E","CONCACAF","outGrp","Debutant · smallest nation ever to qualify","cw",-68.97,12.2],
+    "Tunisia":      ["F","CAF","outGrp","","tn",9.5,34.0],
+    "New Zealand":  ["G","OFC","outGrp","","nz",172.8,-41.5],
+    "Iran":         ["G","AFC","outGrp","","ir",53.7,32.4],
+    "Saudi Arabia": ["H","AFC","outGrp","","sa",45.0,24.0],
+    "Uruguay":      ["H","CONMEBOL","outGrp","Two-time champions","uy",-55.8,-32.5],
+    "Iraq":         ["I","AFC","outGrp","First World Cup since 1986","iq",43.7,33.2],
+    "Jordan":       ["J","AFC","outGrp","Debutant","jo",36.2,31.3],
+    "Uzbekistan":   ["K","AFC","outGrp","Debutant · first Central Asian nation at a World Cup","uz",64.6,41.4],
+    "Panama":       ["L","CONCACAF","outGrp","","pa",-80.1,8.5]
+  };
+
+  const flagUrl = (iso, w) => `https://flagcdn.com/w${w}/${iso}.png`;
+
+  /* =========================================================
+     2. ARCGIS SIGN-IN (OAuth 2.0 / PKCE — Client ID only.
+        NEVER put the client secret in browser code.)
+     ========================================================= */
+  const oauthInfo = new OAuthInfo({
+    appId: "knDFYPIvEhld0htk",
+    portalUrl: "https://essorg.maps.arcgis.com",   // your org's portal
+    popup: true,
+    // Must resolve to a URL registered under the app's Redirect URIs.
+    // You registered https://essorg.maps.arcgis.com/apps/ — host this
+    // page under that path so the callback matches exactly.
+    popupCallbackUrl: window.location.href.split("?")[0]
+  });
+  esriId.registerOAuthInfos([oauthInfo]);
+
+  const signInBtn = document.getElementById("signIn");
+  const signOutBtn = document.getElementById("signOut");
+  const authStatus = document.getElementById("authStatus");
+
+  function refreshAuthUI(credential) {
+    if (credential) {
+      authStatus.textContent = "Signed in as " + credential.userId;
+      signInBtn.hidden = true; signOutBtn.hidden = false;
+    } else {
+      authStatus.textContent = "Browsing as guest";
+      signInBtn.hidden = false; signOutBtn.hidden = true;
+    }
+  }
+  esriId.checkSignInStatus(oauthInfo.portalUrl + "/sharing")
+    .then(refreshAuthUI).catch(() => refreshAuthUI(null));
+  signInBtn.addEventListener("click", () => {
+    esriId.getCredential(oauthInfo.portalUrl + "/sharing")
+      .then(refreshAuthUI)
+      .catch(() => { authStatus.textContent = "Sign-in cancelled or app ID not set"; });
+  });
+  signOutBtn.addEventListener("click", () => { esriId.destroyCredentials(); refreshAuthUI(null); });
+
+  /* =========================================================
+     3. FLAG SYMBOLOGY — client-side FeatureLayer of points,
+        UniqueValueRenderer with a PictureMarkerSymbol per flag
+     ========================================================= */
+  const order = ["qf","r16","outR16","outR32","outGrp"];
+
+  const graphics = Object.entries(TEAMS).map(([team, [group, conf, statusKey, note, iso, lon, lat]], i) => new Graphic({
+    geometry: { type: "point", longitude: lon, latitude: lat },
+    attributes: {
+      ObjectID: i + 1,
+      team, group, conf,
+      statusKey,
+      statusLabel: STATUSES[statusKey].label,
+      statusRank: order.indexOf(statusKey),  // draw deep-run teams on top
+      note, iso
+    }
+  }));
+
+  // One PictureMarkerSymbol per team — the flag IS the symbol.
+  // Flags scale up slightly the further a team has advanced.
+  const sizeFor = (statusKey) =>
+    ({ qf: [40, 27], r16: [34, 23], outR16: [28, 19], outR32: [24, 16], outGrp: [21, 14] })[statusKey];
+
+  const uniqueValueInfos = Object.entries(TEAMS).map(([team, [, , statusKey, , iso]]) => {
+    const [w, h] = sizeFor(statusKey);
+    return {
+      value: team,
+      symbol: {
+        type: "picture-marker",
+        url: flagUrl(iso, 80),
+        width: w + "px",
+        height: h + "px"
+      }
+    };
+  });
+
+  const flagLayer = new FeatureLayer({
+    title: "World Cup 2026 — team flags",
+    source: graphics,
+    objectIdField: "ObjectID",
+    geometryType: "point",
+    spatialReference: { wkid: 4326 },
+    fields: [
+      { name: "ObjectID", type: "oid" },
+      { name: "team", type: "string" },
+      { name: "group", type: "string" },
+      { name: "conf", type: "string" },
+      { name: "statusKey", type: "string" },
+      { name: "statusLabel", type: "string" },
+      { name: "statusRank", type: "integer" },
+      { name: "note", type: "string" },
+      { name: "iso", type: "string" }
+    ],
+    renderer: {
+      type: "unique-value",
+      field: "team",
+      uniqueValueInfos
+    },
+    orderBy: [{ field: "statusRank", order: "descending" }], // quarter-finalists drawn last (on top)
+    popupTemplate: {
+      title: "{team}",
+      outFields: ["*"],
+      content: (feature) => {
+        const a = feature.graphic.attributes;
+        const s = STATUSES[a.statusKey];
+        const el = document.createElement("div");
+        el.className = "wc-pop";
+        el.innerHTML = `
+          <div class="head">
+            <img src="${flagUrl(a.iso, 80)}" alt="Flag of ${a.team}">
+            <span class="badge" style="background:${s.color}">${s.label}</span>
+          </div>
+          <dl>
+            <dt>Group</dt><dd>Group ${a.group}</dd>
+            <dt>Confederation</dt><dd>${a.conf}</dd>
+            ${a.note ? `<dt>Notes</dt><dd>${a.note}</dd>` : ""}
+          </dl>`;
+        return el;
+      }
+    }
+  });
+
+  /* Subtle status-tinted country polygons kept underneath as
+     context (toggle off in the Layer List if you want flags only) */
+  const POLY_ALIASES = {
+    "United Kingdom": ["England","Scotland"], "Czech Republic": ["Czechia"],
+    "Turkey": ["Türkiye"], "Turkiye": ["Türkiye"], "Cabo Verde": ["Cape Verde"],
+    "Curacao": ["Curaçao"], "Congo DRC": ["DR Congo"],
+    "Democratic Republic of the Congo": ["DR Congo"], "Ivory Coast": ["Côte d'Ivoire"],
+    "Korea, South": ["South Korea"], "Republic of Korea": ["South Korea"]
+  };
+  const polyNames = new Set(Object.keys(TEAMS));
+  polyNames.delete("England"); polyNames.delete("Scotland");
+  Object.keys(POLY_ALIASES).forEach(n => polyNames.add(n));
+  const polyInfos = [...polyNames].map(name => {
+    const teams = POLY_ALIASES[name] || (TEAMS[name] ? [name] : null);
+    if (!teams) return null;
+    const best = teams.map(t => TEAMS[t][2]).sort((a,b) => order.indexOf(a) - order.indexOf(b))[0];
+    return {
+      value: name,
+      symbol: { type: "simple-fill", color: STATUSES[best].color + "40",
+                outline: { color: STATUSES[best].color + "90", width: 0.7 } }
+    };
+  }).filter(Boolean);
+
+  const countryLayer = new FeatureLayer({
+    url: "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/World_Countries_(Generalized)/FeatureServer/0",
+    title: "Country tint (status)",
+    definitionExpression: "COUNTRY IN (" + [...polyNames].map(n => "'" + n.replace(/'/g,"''") + "'").join(",") + ")",
+    outFields: ["COUNTRY"],
+    legendEnabled: false,
+    popupEnabled: false,
+    renderer: { type: "unique-value", field: "COUNTRY", uniqueValueInfos: polyInfos, defaultSymbol: null }
+  });
+
+  /* =========================================================
+     3b. "ALL 48 NATIONS" TAB — every participating country's
+         polygon is filled with ONE flag spread across it,
+         irrespective of tournament status. The fill dimensions
+         are fixed per country (no zoom-dependent re-tiling),
+         sized by country footprint so a single flag covers
+         the polygon instead of repeating as a grid.
+     ========================================================= */
+  // iso code for each polygon on the countries layer
+  function isoForPoly(name) {
+    if (name === "United Kingdom") return "gb";                  // hosts both England & Scotland
+    const teams = POLY_ALIASES[name] || (TEAMS[name] ? [name] : null);
+    return teams ? TEAMS[teams[0]][4] : null;
+  }
+
+  // Fixed fill size per country footprint: one flag "spread" per polygon.
+  // XL = continental-scale countries, L = large, M = mid, S = small/island.
+  const SIZE_CLASS = {
+    XL: ["Canada","United States","Brazil","Australia","Argentina","Algeria",
+         "Saudi Arabia","Mexico","Iran","Congo DRC","Democratic Republic of the Congo","DR Congo"],
+    L:  ["Colombia","Egypt","France","Spain","Sweden","Norway","Germany","Japan",
+         "Morocco","South Africa","Iraq","Paraguay","Uzbekistan","Türkiye","Turkey","Turkiye",
+         "Ecuador","Ghana","Senegal","Côte d'Ivoire","Ivory Coast","New Zealand","Uruguay","Tunisia"],
+    // everything else defaults to M; true micro-territories get S
+    S:  ["Curaçao","Curacao","Cape Verde","Cabo Verde","Qatar","Haiti","Panama","Jordan"]
+  };
+  function fillSizeFor(name) {
+    if (SIZE_CLASS.XL.includes(name)) return [520, 347];
+    if (SIZE_CLASS.L.includes(name))  return [280, 187];
+    if (SIZE_CLASS.S.includes(name))  return [64, 43];
+    return [150, 100]; // M — European mid-size, Korea, Belgium, etc.
+  }
+
+  const fillInfos = [...polyNames].map(name => {
+    const iso = isoForPoly(name);
+    if (!iso) return null;
+    const [w, h] = fillSizeFor(name);
+    return {
+      value: name,
+      symbol: {
+        type: "picture-fill",
+        url: flagUrl(iso, 320),      // high-res source so large fills stay crisp
+        width: w + "px",
+        height: h + "px",
+        outline: { color: "#0e1512", width: 1 }
+      }
+    };
+  }).filter(Boolean);
+
+  const flagFillLayer = new FeatureLayer({
+    url: "https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/World_Countries_(Generalized)/FeatureServer/0",
+    title: "All 48 nations — flag fill",
+    visible: false,
+    // Picture-fill dimensions are screen-space; pinning the layer to a
+    // fixed scale window keeps the flag-to-polygon proportion constant.
+    minScale: 220000000,
+    maxScale: 9000000,
+    definitionExpression: "COUNTRY IN (" + [...polyNames].map(n => "'" + n.replace(/'/g,"''") + "'").join(",") + ")",
+    outFields: ["COUNTRY"],
+    legendEnabled: false,
+    renderer: { type: "unique-value", field: "COUNTRY", uniqueValueInfos: fillInfos, defaultSymbol: null },
+    popupTemplate: {
+      title: "{COUNTRY}",
+      outFields: ["COUNTRY"],
+      content: (feature) => {
+        const country = feature.graphic.attributes.COUNTRY;
+        const teams = POLY_ALIASES[country] || (TEAMS[country] ? [country] : []);
+        const el = document.createElement("div");
+        el.className = "wc-pop";
+        el.innerHTML = teams.map(name => {
+          const [group, conf, statusKey, note, iso] = TEAMS[name];
+          const s = STATUSES[statusKey];
+          return `
+            <div class="head">
+              <img src="${flagUrl(iso, 80)}" alt="Flag of ${name}">
+              <div><strong>${name}</strong><br>
+              <span class="badge" style="background:${s.color}">${s.label}</span></div>
+            </div>
+            <dl>
+              <dt>Group</dt><dd>Group ${group}</dd>
+              <dt>Confederation</dt><dd>${conf}</dd>
+              ${note ? `<dt>Notes</dt><dd>${note}</dd>` : ""}
+            </dl>`;
+        }).join("<hr style='border:none;border-top:1px solid #2a3c34;margin:10px 0'>");
+        return el;
+      }
+    }
+  });
+
+  const map = new Map({ basemap: "dark-gray-vector", layers: [countryLayer, flagLayer, flagFillLayer] });
+
+  const view = new MapView({
+    container: "viewDiv",
+    map,
+    center: [-30, 25],
+    zoom: 2,
+    popup: { dockEnabled: true, dockOptions: { breakpoint: false, position: "bottom-right" } },
+    constraints: { minZoom: 1 }
+  });
+
+  /* =========================================================
+     4. WIDGETS
+     ========================================================= */
+  view.ui.add(new Home({ view }), "top-left");
+  view.ui.add(new Fullscreen({ view }), "top-left");
+
+  const search = new Search({
+    view,
+    includeDefaultSources: false,
+    sources: [{
+      layer: flagLayer,
+      searchFields: ["team"],
+      displayField: "team",
+      exactMatch: false,
+      outFields: ["*"],
+      name: "World Cup teams",
+      placeholder: "Find a team (e.g. Morocco)"
+    }]
+  });
+  view.ui.add(search, "top-right");
+
+  view.ui.add(new Expand({ view, content: new Legend({ view, layerInfos: [{ layer: flagLayer, title: "Teams (flag = symbol)" }] }), expandIcon: "legend", expandTooltip: "Legend" }), "bottom-left");
+  view.ui.add(new Expand({ view, content: new BasemapGallery({ view }), expandIcon: "basemap", expandTooltip: "Basemaps" }), "top-right");
+  view.ui.add(new Expand({ view, content: new LayerList({ view }), expandIcon: "layers", expandTooltip: "Layers" }), "top-right");
+  view.ui.add(new ScaleBar({ view, unit: "dual" }), "bottom-right");
+
+  /* =========================================================
+     5. TABS — switch between the two views
+     ========================================================= */
+  const tabStatus = document.getElementById("tabStatus");
+  const tabAll = document.getElementById("tabAll");
+  let activeTab = "status";
+
+  function setTab(tab) {
+    activeTab = tab;
+    const statusOn = tab === "status";
+    tabStatus.setAttribute("aria-selected", statusOn);
+    tabAll.setAttribute("aria-selected", !statusOn);
+    flagLayer.visible = statusOn;
+    countryLayer.visible = statusOn;
+    flagFillLayer.visible = !statusOn;
+    document.getElementById("filters").style.display = statusOn ? "flex" : "none";
+    view.closePopup();
+    if (!statusOn) {
+      // All-nations view ignores status filters — show every polygon
+      flagFillLayer.definitionExpression =
+        "COUNTRY IN (" + [...polyNames].map(n => "'" + n.replace(/'/g,"''") + "'").join(",") + ")";
+    }
+  }
+  tabStatus.addEventListener("click", () => setTab("status"));
+  tabAll.addEventListener("click", () => setTab("all"));
+
+  /* =========================================================
+     6. SIDEBAR — status filters + flag list
+     ========================================================= */
+  const filtersEl = document.getElementById("filters");
+  const listEl = document.getElementById("teamList");
+  const countEl = document.getElementById("count");
+  let activeFilter = null;
+
+  const statusCounts = {};
+  Object.values(TEAMS).forEach(([, , s]) => statusCounts[s] = (statusCounts[s] || 0) + 1);
+
+  Object.entries(STATUSES).forEach(([key, s]) => {
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.setAttribute("aria-pressed", "false");
+    b.innerHTML = `<span class="dot" style="background:${s.color}"></span>${s.label}<span class="n">${statusCounts[key] || 0}</span>`;
+    b.addEventListener("click", () => {
+      activeFilter = activeFilter === key ? null : key;
+      filtersEl.querySelectorAll(".chip").forEach(c => c.setAttribute("aria-pressed", "false"));
+      if (activeFilter) b.setAttribute("aria-pressed", "true");
+      renderList();
+      applyFilter();
+    });
+    filtersEl.appendChild(b);
+  });
+
+  function applyFilter() {
+    flagLayer.definitionExpression = activeFilter ? `statusKey = '${activeFilter}'` : null;
+    if (!activeFilter) {
+      countryLayer.definitionExpression =
+        "COUNTRY IN (" + [...polyNames].map(n => "'" + n.replace(/'/g,"''") + "'").join(",") + ")";
+      return;
+    }
+    const names = new Set();
+    Object.entries(TEAMS).forEach(([name, [, , s]]) => {
+      if (s !== activeFilter) return;
+      let polyName = name;
+      if (name === "England" || name === "Scotland") polyName = "United Kingdom";
+      names.add(polyName);
+      Object.entries(POLY_ALIASES).forEach(([p, arr]) => { if (arr.includes(name)) names.add(p); });
+    });
+    countryLayer.definitionExpression =
+      "COUNTRY IN (" + [...names].map(n => "'" + n.replace(/'/g,"''") + "'").join(",") + ")";
+  }
+
+  function renderList() {
+    listEl.innerHTML = "";
+    const entries = Object.entries(TEAMS)
+      .filter(([, [, , s]]) => !activeFilter || s === activeFilter)
+      .sort((a, b) => a[1][0].localeCompare(b[1][0]) || a[0].localeCompare(b[0]));
+    countEl.textContent = entries.length + " of 48";
+    entries.forEach(([name, [group, , , , iso]]) => {
+      const li = document.createElement("li");
+      const btn = document.createElement("button");
+      btn.innerHTML = `<img class="flag" src="${flagUrl(iso, 40)}" alt="" loading="lazy">
+                       <span>${name}</span><span class="grp">GRP ${group}</span>`;
+      btn.addEventListener("click", () => zoomToTeam(name));
+      li.appendChild(btn);
+      listEl.appendChild(li);
+    });
+  }
+  renderList();
+
+  function zoomToTeam(team) {
+    if (activeTab === "status") {
+      flagLayer.queryFeatures({ where: `team = '${team.replace(/'/g,"''")}'`, returnGeometry: true, outFields: ["*"] })
+        .then(res => {
+          if (!res.features.length) return;
+          const f = res.features[0];
+          view.goTo({ target: f.geometry, zoom: 4 }, { duration: 900 }).then(() => {
+            view.openPopup({ features: [f], location: f.geometry });
+          });
+        });
+      return;
+    }
+    // All-nations tab: zoom to the flag-filled polygon
+    let polyName = team;
+    if (team === "England" || team === "Scotland") polyName = "United Kingdom";
+    const aliases = [polyName, ...Object.keys(POLY_ALIASES).filter(k => POLY_ALIASES[k].includes(team))];
+    const where = "COUNTRY IN (" + aliases.map(n => "'" + n.replace(/'/g,"''") + "'").join(",") + ")";
+    flagFillLayer.queryFeatures({ where, returnGeometry: true, outFields: ["COUNTRY"] })
+      .then(res => {
+        if (!res.features.length) return;
+        const f = res.features[0];
+        view.goTo({ target: f.geometry }, { duration: 900 }).then(() => {
+          view.openPopup({ features: [f], location: f.geometry.extent ? f.geometry.extent.center : null });
+        });
+      });
+  }
+
+  view.on("pointer-move", (evt) => {
+    const layer = activeTab === "status" ? flagLayer : flagFillLayer;
+    view.hitTest(evt, { include: layer }).then(r => {
+      view.container.style.cursor = r.results.length ? "pointer" : "default";
+    });
+  });
+});
+</script>
+</body>
+</html>
