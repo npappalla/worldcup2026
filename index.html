@@ -115,7 +115,7 @@
   <aside>
     <p class="eyebrow">FIFA World Cup 26 · USA · Mexico · Canada</p>
     <h1>48 Flags, One Map</h1>
-    <p class="sub">Every nation is drawn as its flag. Click a flag for group, confederation, and live tournament status (as of July 7, 2026 — quarter-finals stage).</p>
+    <p class="sub">Every nation is drawn as its flag. Click a flag for group, confederation, and live tournament status — as of July 15, 2026: the final is set, <strong>Argentina vs Spain</strong>, Sunday July 19 at MetLife Stadium.</p>
 
     <div class="tabs" role="tablist" aria-label="Map views">
       <button class="tab" id="tabStatus" role="tab" aria-selected="true">Tournament status</button>
@@ -171,26 +171,28 @@ require([
         and Scotland their own flags — no shared UK polygon)
      ========================================================= */
   const STATUSES = {
-    qf:    { label: "Quarter-finalist",           color: "#e7c25a" },
-    r16:   { label: "Round of 16 — in progress",  color: "#46d68c" },
-    outR16:{ label: "Eliminated — Round of 16",   color: "#5aa7e7" },
-    outR32:{ label: "Eliminated — Round of 32",   color: "#8e7fd6" },
-    outGrp:{ label: "Eliminated — Group stage",   color: "#c96b5a" }
+    final: { label: "Finalist — July 19",            color: "#e7c25a" },
+    third: { label: "Third-place playoff — July 18", color: "#cbd5df" },
+    outQF: { label: "Eliminated — Quarter-finals",   color: "#46d68c" },
+    outR16:{ label: "Eliminated — Round of 16",      color: "#5aa7e7" },
+    outR32:{ label: "Eliminated — Round of 32",      color: "#8e7fd6" },
+    outGrp:{ label: "Eliminated — Group stage",      color: "#c96b5a" }
   };
 
   const TEAMS = {
-    "Morocco":      ["C","CAF","qf","Beat Canada 3-0 in the Round of 16","ma",-6.0,32.0],
-    "France":       ["I","UEFA","qf","Beat Paraguay 1-0 in the Round of 16","fr",2.2,46.6],
-    "Norway":       ["I","UEFA","qf","Beat Brazil 2-1 in the Round of 16","no",9.0,61.0],
-    "England":      ["L","UEFA","qf","Beat Mexico 3-2 in the Round of 16","gb-eng",-1.5,52.5],
-    "Spain":        ["H","UEFA","qf","Beat Portugal 1-0 in the Round of 16","es",-3.7,40.2],
-    "Belgium":      ["G","UEFA","qf","Beat the United States in the Round of 16","be",4.5,50.6],
+    "Argentina":    ["J","CONMEBOL","final","Beat England 2-1 with two goals in the last five minutes, both assisted by Messi · chasing back-to-back titles · Final vs Spain, July 19, MetLife Stadium","ar",-65.0,-35.0],
+    "Spain":        ["H","UEFA","final","Beat France 2-0 in the semi-final · first final since 2010","es",-3.7,40.2],
 
-    "Argentina":    ["J","CONMEBOL","r16","Defending champions · FIFA No. 1 · face Egypt","ar",-65.0,-35.0],
-    "Egypt":        ["G","CAF","r16","Beat Australia on penalties in the Round of 32","eg",30.0,26.8],
-    "Colombia":     ["K","CONMEBOL","r16","Beat Ghana 1-0 in the Round of 32","co",-74.3,4.6],
-    "Switzerland":  ["B","UEFA","r16","Beat Algeria 2-0 in the Round of 32","ch",8.2,46.8],
+    "France":       ["I","UEFA","third","Lost 2-0 to Spain in the semi-final · plays England for third place, July 18","fr",2.2,46.6],
+    "England":      ["L","UEFA","third","Led 1-0 until the 85th, lost 2-1 to Argentina on a stoppage-time winner · plays France for third place, July 18","gb-eng",-1.5,52.5],
 
+    "Morocco":      ["C","CAF","outQF","Lost 2-0 to France in the quarter-final — a rematch of the 2022 semi","ma",-6.0,32.0],
+    "Belgium":      ["G","UEFA","outQF","Lost to Spain in the quarter-final","be",4.5,50.6],
+    "Norway":       ["I","UEFA","outQF","Haaland's fairy-tale run ended by England in extra time","no",9.0,61.0],
+    "Switzerland":  ["B","UEFA","outQF","Lost 3-1 to Argentina after extra time","ch",8.2,46.8],
+
+    "Egypt":        ["G","CAF","outR16","Lost to Argentina in the Round of 16","eg",30.0,26.8],
+    "Colombia":     ["K","CONMEBOL","outR16","Lost to Switzerland in the Round of 16","co",-74.3,4.6],
     "Canada":       ["B","CONCACAF","outR16","Co-host · first ever Round of 16","ca",-106.0,58.0],
     "Brazil":       ["C","CONMEBOL","outR16","Lost 2-1 to Norway","br",-53.0,-10.0],
     "Paraguay":     ["D","CONMEBOL","outR16","Lost 1-0 to France","py",-58.4,-23.4],
@@ -273,7 +275,7 @@ require([
      3. FLAG SYMBOLOGY — client-side FeatureLayer of points,
         UniqueValueRenderer with a PictureMarkerSymbol per flag
      ========================================================= */
-  const order = ["qf","r16","outR16","outR32","outGrp"];
+  const order = ["final","third","outQF","outR16","outR32","outGrp"];
 
   const graphics = Object.entries(TEAMS).map(([team, [group, conf, statusKey, note, iso, lon, lat]], i) => new Graphic({
     geometry: { type: "point", longitude: lon, latitude: lat },
@@ -290,7 +292,7 @@ require([
   // One PictureMarkerSymbol per team — the flag IS the symbol.
   // Flags scale up slightly the further a team has advanced.
   const sizeFor = (statusKey) =>
-    ({ qf: [40, 27], r16: [34, 23], outR16: [28, 19], outR32: [24, 16], outGrp: [21, 14] })[statusKey];
+    ({ final: [44, 29], third: [36, 24], outQF: [30, 20], outR16: [26, 17], outR32: [22, 15], outGrp: [19, 13] })[statusKey];
 
   const uniqueValueInfos = Object.entries(TEAMS).map(([team, [, , statusKey, , iso]]) => {
     const [w, h] = sizeFor(statusKey);
